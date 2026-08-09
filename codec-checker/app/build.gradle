@@ -1,0 +1,16 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.extremeos.dvchecker'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.extremeos.dvchecker'
+        minSdk 21
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+    }
+}
