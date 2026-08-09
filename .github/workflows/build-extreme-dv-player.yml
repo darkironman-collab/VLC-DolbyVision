@@ -6,6 +6,11 @@ on:
     paths:
       - 'extreme-dv-player/**'
       - '.github/workflows/build-extreme-dv-player.yml'
+  pull_request:
+    branches: [ master ]
+    paths:
+      - 'extreme-dv-player/**'
+      - '.github/workflows/build-extreme-dv-player.yml'
   workflow_dispatch:
 
 jobs:
