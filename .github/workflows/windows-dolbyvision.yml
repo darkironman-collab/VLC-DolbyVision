@@ -27,6 +27,7 @@ jobs:
       - name: Apply Dolby Vision MFT changes
         run: |
           python3 dolbyvision/apply_mft_dv.py
+          python3 dolbyvision/apply_dovi_detection.py
           git diff --check
           git diff -- modules/codec/mft.cpp
 
