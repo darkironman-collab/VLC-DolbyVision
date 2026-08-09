@@ -1,0 +1,72 @@
+name: Windows x64 Dolby Vision
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/windows-dolby-vision
+    paths:
+      - 'dolbyvision/**'
+      - '.github/workflows/windows-dolbyvision.yml'
+      - 'modules/codec/mft.cpp'
+
+permissions:
+  contents: read
+
+jobs:
+  build-win64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout VLC-DolbyVision
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Apply Dolby Vision MFT changes
+        run: |
+          python3 dolbyvision/apply_mft_dv.py
+          git diff --check
+          git diff -- modules/codec/mft.cpp
+
+      - name: Build VLC Windows x64 in official VideoLAN CI image
+        shell: bash
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/vlc" \
+            -w /vlc \
+            registry.videolan.org/vlc-debian-win64-posix:20260611225331 \
+            bash -lc '
+              set -euxo pipefail
+              export CI_JOB_NAME=win64
+              export TRIPLET=x86_64-w64-mingw32
+              export VLC_CONTRIB_SHA="$(extras/ci/get-contrib-sha.sh win64)"
+              export VLC_PREBUILT_CONTRIBS_URL="https://artifacts.videolan.org/vlc/win64/vlc-contrib-${TRIPLET}-${VLC_CONTRIB_SHA}.tar.zst"
+              if ! extras/ci/check-url.sh "$VLC_PREBUILT_CONTRIBS_URL"; then
+                unset VLC_PREBUILT_CONTRIBS_URL
+              fi
+              extras/package/win32/build.sh -a x86_64 -p -i n
+            '
+
+      - name: Collect build output
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          find win64 -maxdepth 1 -type f \
+            \( -name '*.exe' -o -name '*.msi' -o -name '*.7z' -o -name '*.zip' \) \
+            -print -exec cp -v {} artifacts/ \; || true
+          if [ -d win64/vlc-win64 ]; then
+            tar -C win64 -czf artifacts/vlc-dolbyvision-win64-tree.tar.gz vlc-win64
+          fi
+          ls -lah artifacts || true
+
+      - name: Upload Windows build
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: VLC-DolbyVision-Windows-x64
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 14
