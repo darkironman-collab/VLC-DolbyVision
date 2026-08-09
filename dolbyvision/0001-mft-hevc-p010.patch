@@ -1,0 +1,49 @@
+diff --git a/modules/codec/mft.cpp b/modules/codec/mft.cpp
+--- a/modules/codec/mft.cpp
++++ b/modules/codec/mft.cpp
+@@
+ class mft_dec_video : public vlc_mft_d3d
+ {
+ public:
+     mft_dec_video() = default;
+     virtual ~mft_dec_video() = default;
+@@
+-    /* H264 only. */
++    /* H.264/HEVC byte-stream helper. */
+     struct hxxx_helper hh = {};
+     bool   b_xps_pushed = false; ///< (for xvcC) parameter sets pushed (SPS/PPS/VPS)
+ };
+@@
+     { VLC_CODEC_WMV3, MFVideoFormat_WMV3 },
+     { VLC_CODEC_VC1,  MFVideoFormat_WVC1 },
+     { VLC_CODEC_AV1,  MFVideoFormat_AV1 },
++    { VLC_CODEC_HEVC, MFVideoFormat_HEVC },
+ 
+     { 0, GUID_NULL }
+ };
+@@
+     { VLC_CODEC_BGR24, MFVideoFormat_RGB24  },
+     { VLC_CODEC_BGRA,  MFVideoFormat_ARGB32 },
+     { VLC_CODEC_GREY,  MFVideoFormat_L8 },
++    { VLC_CODEC_P010,  MFVideoFormat_P010 },
+ 
+     { 0, GUID_NULL }
+ };
+@@
+-        if (p_dec->fmt_in->i_codec == VLC_CODEC_H264)
++        if (p_dec->fmt_in->i_codec == VLC_CODEC_H264 ||
++            p_dec->fmt_in->i_codec == VLC_CODEC_HEVC)
+         {
+-            /* in-place NAL to annex B conversion. */
++            /* in-place H.26x NAL to Annex B conversion. */
+             auto *vidsys = dynamic_cast<mft_dec_video*>(p_sys);
+             p_block = hxxx_helper_process_block(&vidsys->hh, p_block);
+@@
+-    if (p_dec->fmt_in->i_codec == VLC_CODEC_H264)
++    if (p_dec->fmt_in->i_codec == VLC_CODEC_H264 ||
++        p_dec->fmt_in->i_codec == VLC_CODEC_HEVC)
+     {
+         auto *vidsys = dynamic_cast<mft_dec_video*>(p_sys);
+         hxxx_helper_init(&vidsys->hh, VLC_OBJECT(p_dec), p_dec->fmt_in->i_codec, 0, 0);
+         hxxx_helper_set_extra(&vidsys->hh, p_dec->fmt_in->p_extra, p_dec->fmt_in->i_extra);
+     }
