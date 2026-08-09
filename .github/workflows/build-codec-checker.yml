@@ -6,6 +6,10 @@ on:
     paths:
       - 'codec-checker/**'
       - '.github/workflows/build-codec-checker.yml'
+  pull_request:
+    paths:
+      - 'codec-checker/**'
+      - '.github/workflows/build-codec-checker.yml'
   workflow_dispatch:
 
 jobs:
