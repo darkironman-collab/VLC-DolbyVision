@@ -33,18 +33,19 @@ jobs:
       - name: Build VLC Windows x64 in official VideoLAN CI image
         shell: bash
         run: |
-          # Run the container with the GitHub runner UID/GID so the bind-mounted
-          # checkout remains writable. The VideoLAN image otherwise uses a
-          # different non-root UID, which causes Permission denied in extras/tools.
+          # The VideoLAN image uses its own named build user. Keep that user so
+          # Python/Meson can resolve its home directory, and make the bind mount
+          # writable instead of forcing the host UID (which is absent from the
+          # image's /etc/passwd).
+          chmod -R a+rwX "$GITHUB_WORKSPACE"
           docker run --rm \
-            --user "$(id -u):$(id -g)" \
-            -e HOME=/tmp/vlc-home \
             -v "$GITHUB_WORKSPACE:/vlc" \
             -w /vlc \
             registry.videolan.org/vlc-debian-win64-posix:20260611225331 \
             bash -lc '
               set -euxo pipefail
-              mkdir -p "$HOME"
+              test -n "$HOME"
+              test -d "$HOME"
               export CI_JOB_NAME=win64
               export TRIPLET=x86_64-w64-mingw32
               export VLC_CONTRIB_SHA="$(extras/ci/get-contrib-sha.sh win64)"
