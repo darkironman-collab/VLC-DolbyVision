@@ -10,8 +10,8 @@ android {
         applicationId 'com.extreme.dvplayer'
         minSdk 26
         targetSdk 36
-        versionCode 3
-        versionName '0.3.0'
+        versionCode 4
+        versionName '0.3.1'
     }
 
     buildTypes {
@@ -25,6 +25,44 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+}
+
+// Inject a streaming-optimized Media3 LoadControl into PlayerActivity before compilation.
+// This keeps local-file behavior unchanged while giving HTTP/HLS/DASH/RTSP a deeper cache
+// and a larger recovery cushion, closer to cache-heavy players such as mpv-based apps.
+tasks.register('injectStreamingBuffer') {
+    doLast {
+        def src = file('src/main/java/com/extreme/dvplayer/PlayerActivity.java')
+        if (!src.exists()) return
+        def text = src.getText('UTF-8')
+        def marker = 'setBufferDurationsMsForStreaming(30000, 120000, 750, 5000)'
+        if (text.contains(marker)) return
+
+        def oldLine = '        player = new ExoPlayer.Builder(this, renderersFactory).build();'
+        def replacement = '''        androidx.media3.exoplayer.DefaultLoadControl streamingLoadControl =
+                new androidx.media3.exoplayer.DefaultLoadControl.Builder()
+                        // Keep 30–120 seconds buffered for online streams when bandwidth allows.
+                        .setBufferDurationsMsForStreaming(30000, 120000, 750, 5000)
+                        // Prefer reaching the requested time buffer instead of stopping only because
+                        // the default byte target was reached (important for high-bitrate DV streams).
+                        .setPrioritizeTimeOverSizeThresholdsForStreaming(true)
+                        // Keep a small back-buffer so short backward seeks do not always hit network.
+                        .setBackBuffer(15000, true)
+                        .build();
+
+        player = new ExoPlayer.Builder(this, renderersFactory)
+                .setLoadControl(streamingLoadControl)
+                .build();'''
+
+        if (!text.contains(oldLine)) {
+            throw new GradleException('Could not find ExoPlayer builder line for streaming buffer injection')
+        }
+        src.write(text.replace(oldLine, replacement), 'UTF-8')
+    }
+}
+
+tasks.named('preBuild').configure {
+    dependsOn tasks.named('injectStreamingBuffer')
 }
 
 dependencies {
