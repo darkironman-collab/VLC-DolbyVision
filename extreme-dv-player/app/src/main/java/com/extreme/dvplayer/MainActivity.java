@@ -28,6 +28,7 @@ import androidx.appcompat.app.AppCompatActivity;
 public class MainActivity extends AppCompatActivity {
     private static final int PICK_VIDEO = 42;
     private static final String[] MODES = {
+            "Original stream (device default)",
             "Native Auto (P5/P8)",
             "Prefer Dolby Vision Profile 8 family",
             "Prefer Dolby Vision Profile 5",
@@ -112,15 +113,15 @@ public class MainActivity extends AppCompatActivity {
             }
         };
         modeSpinner.setAdapter(adapter);
-        modeSpinner.setSelection(1);
+        modeSpinner.setSelection(2);
         modeSpinner.setBackground(roundRect(Color.rgb(39, 45, 57), 2, Color.rgb(200, 255, 32), 18));
         LinearLayout.LayoutParams spinnerLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(70));
         spinnerLp.setMargins(0, dp(18), 0, dp(14));
         modeCard.addView(modeSpinner, spinnerLp);
 
-        activeMode = text("Active mode: Prefer Profile 8 family", 17, Color.rgb(200, 255, 32), Typeface.BOLD);
+        activeMode = text("Active mode: Prefer Dolby Vision Profile 8 family", 17, Color.rgb(200, 255, 32), Typeface.BOLD);
         modeCard.addView(activeMode);
-        TextView note = text("Uses the device's native MediaCodec path. It does not transcode Dolby Vision bitstreams.", 15, Color.rgb(177,181,194), Typeface.NORMAL);
+        TextView note = text("Original stream leaves codec selection to Android unchanged. DV modes prefer the native OPlus/Dolby MediaCodec path; compressed video is not transcoded.", 15, Color.rgb(177,181,194), Typeface.NORMAL);
         LinearLayout.LayoutParams noteLp = lpMatchWrap();
         noteLp.setMargins(0, dp(8), 0, 0);
         modeCard.addView(note, noteLp);
@@ -185,6 +186,7 @@ public class MainActivity extends AppCompatActivity {
         Intent i = new Intent(this, PlayerActivity.class);
         i.setData(uri);
         i.putExtra("mode", modeSpinner.getSelectedItemPosition());
+        i.putExtra("mode_name", MODES[modeSpinner.getSelectedItemPosition()]);
         startActivity(i);
     }
 
@@ -199,11 +201,15 @@ public class MainActivity extends AppCompatActivity {
 
     private void showSettings() {
         String[] items = {
+                "Original stream / Android default decoder mode",
                 "Hardware decoding: ON",
-                "Prefer OPlus/Dolby decoder for DV: ON",
+                "Prefer OPlus/Dolby decoder for DV modes: ON",
                 "Decoder fallback: ON",
-                "Keep screen awake during playback: ON",
-                "Profile 7 is not forced on this device"
+                "Brightness swipe: left side",
+                "Volume swipe: right side",
+                "External subtitles + audio track selector",
+                "Crop / fit / stretch / width / height controls",
+                "Transparent media info overlay"
         };
         new AlertDialog.Builder(this)
                 .setTitle("Player settings")
