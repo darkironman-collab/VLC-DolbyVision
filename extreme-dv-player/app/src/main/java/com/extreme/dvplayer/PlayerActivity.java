@@ -1,5 +1,6 @@
 package com.extreme.dvplayer;
 
+import android.app.AlertDialog;
 import android.content.Context;
 import android.media.AudioManager;
 import android.net.Uri;
@@ -24,6 +25,7 @@ import androidx.media3.common.Format;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.Player;
+import androidx.media3.common.TrackSelectionOverride;
 import androidx.media3.common.Tracks;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
@@ -47,11 +49,13 @@ public class PlayerActivity extends AppCompatActivity {
     private TextView infoView;
     private TextView gestureView;
     private Button resizeButton;
+    private Button hardwareButton;
 
     private Uri mediaUri;
     private Uri subtitleUri;
     private String subtitleMimeType;
     private long resumePositionMs;
+    private String modeName = "Native Auto";
 
     private AudioManager audioManager;
     private float downX;
@@ -91,6 +95,8 @@ public class PlayerActivity extends AppCompatActivity {
         getWindow().setNavigationBarColor(android.graphics.Color.BLACK);
 
         mediaUri = getIntent().getData();
+        modeName = getIntent().getStringExtra("mode_name");
+        if (modeName == null) modeName = "Native Auto";
         audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
 
         buildUi();
@@ -139,8 +145,13 @@ public class PlayerActivity extends AppCompatActivity {
         LinearLayout quick = new LinearLayout(this);
         quick.setOrientation(LinearLayout.HORIZONTAL);
         quick.setGravity(Gravity.CENTER_VERTICAL);
-        quick.setPadding(dp(6), dp(6), dp(6), dp(6));
-        quick.setBackgroundColor(0x44000000);
+        quick.setPadding(dp(4), dp(4), dp(4), dp(4));
+        quick.setBackgroundColor(0x33000000);
+
+        Button audio = smallButton("♫");
+        audio.setTextSize(20f);
+        audio.setOnClickListener(v -> showAudioTracks());
+        quick.addView(audio);
 
         Button sub = smallButton("SUB");
         sub.setOnClickListener(v -> subtitlePicker.launch(new String[]{
@@ -148,13 +159,14 @@ public class PlayerActivity extends AppCompatActivity {
         }));
         quick.addView(sub);
 
-        resizeButton = smallButton(resizeNames[resizeIndex]);
-        resizeButton.setOnClickListener(v -> cycleResizeMode());
-        quick.addView(resizeButton);
+        hardwareButton = smallButton("HW");
+        hardwareButton.setOnClickListener(v -> Toast.makeText(this, "Decoder mode: " + modeName, Toast.LENGTH_SHORT).show());
+        quick.addView(hardwareButton);
 
-        Button info = smallButton("INFO");
-        info.setOnClickListener(v -> toggleInfo());
-        quick.addView(info);
+        Button more = smallButton("⋮");
+        more.setTextSize(22f);
+        more.setOnClickListener(v -> showMoreMenu());
+        quick.addView(more);
 
         FrameLayout.LayoutParams quickLp = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -163,6 +175,15 @@ public class PlayerActivity extends AppCompatActivity {
         quickLp.setMargins(dp(8), dp(8), dp(8), dp(8));
         root.addView(quick, quickLp);
 
+        resizeButton = smallButton("▣ " + resizeNames[resizeIndex]);
+        resizeButton.setOnClickListener(v -> cycleResizeMode());
+        FrameLayout.LayoutParams resizeLp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                dp(44),
+                Gravity.END | Gravity.BOTTOM);
+        resizeLp.setMargins(dp(8), dp(8), dp(14), dp(16));
+        root.addView(resizeButton, resizeLp);
+
         playerView.setOnTouchListener(this::handleTouch);
         setContentView(root);
     }
@@ -170,11 +191,13 @@ public class PlayerActivity extends AppCompatActivity {
     private Button smallButton(String text) {
         Button b = new Button(this);
         b.setText(text);
-        b.setTextSize(11f);
+        b.setTextColor(android.graphics.Color.WHITE);
+        b.setTextSize(12f);
         b.setAllCaps(false);
         b.setMinWidth(0);
         b.setMinimumWidth(0);
         b.setPadding(dp(10), 0, dp(10), 0);
+        b.setBackgroundColor(0x44000000);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, dp(42));
         lp.setMargins(dp(2), 0, dp(2), 0);
@@ -195,8 +218,9 @@ public class PlayerActivity extends AppCompatActivity {
             return;
         }
 
-        int mode = getIntent().getIntExtra("mode", 0);
-        MediaCodecSelector selector = mode == 3 ? MediaCodecSelector.DEFAULT : dolbyFirstSelector();
+        int mode = getIntent().getIntExtra("mode", 1);
+        boolean useDeviceDefault = mode == 0 || mode == 4;
+        MediaCodecSelector selector = useDeviceDefault ? MediaCodecSelector.DEFAULT : dolbyFirstSelector();
 
         DefaultRenderersFactory renderersFactory = new DefaultRenderersFactory(this)
                 .setMediaCodecSelector(selector)
@@ -264,10 +288,75 @@ public class PlayerActivity extends AppCompatActivity {
         return p == null ? "subtitle.srt" : p;
     }
 
+    private void showAudioTracks() {
+        if (player == null) return;
+        List<Tracks.Group> groups = new ArrayList<>();
+        List<Integer> trackIndexes = new ArrayList<>();
+        List<String> labels = new ArrayList<>();
+        int selected = -1;
+
+        for (Tracks.Group group : player.getCurrentTracks().getGroups()) {
+            if (group.getType() != C.TRACK_TYPE_AUDIO) continue;
+            for (int i = 0; i < group.length; i++) {
+                Format f = group.getTrackFormat(i);
+                String label = f.label;
+                if (label == null || label.isEmpty()) label = f.language;
+                if (label == null || label.isEmpty()) label = "Audio " + (labels.size() + 1);
+                if (f.channelCount > 0) label += " · " + f.channelCount + "ch";
+                if (f.codecs != null) label += " · " + f.codecs;
+                groups.add(group);
+                trackIndexes.add(i);
+                labels.add(label);
+                if (group.isTrackSelected(i)) selected = labels.size() - 1;
+            }
+        }
+
+        if (labels.isEmpty()) {
+            Toast.makeText(this, "No alternate audio tracks", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        final int checked = selected;
+        new AlertDialog.Builder(this)
+                .setTitle("Audio track")
+                .setSingleChoiceItems(labels.toArray(new String[0]), checked, (dialog, which) -> {
+                    Tracks.Group group = groups.get(which);
+                    int track = trackIndexes.get(which);
+                    TrackSelectionOverride override = new TrackSelectionOverride(group.getMediaTrackGroup(), track);
+                    player.setTrackSelectionParameters(
+                            player.getTrackSelectionParameters().buildUpon()
+                                    .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+                                    .setOverrideForType(override)
+                                    .build());
+                    dialog.dismiss();
+                    updateInfo();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void showMoreMenu() {
+        String[] items = {
+                infoView.getVisibility() == View.VISIBLE ? "Hide video info" : "Show video info",
+                "Load external subtitle",
+                "Change screen size",
+                "Decoder: " + modeName
+        };
+        new AlertDialog.Builder(this)
+                .setTitle("Playback options")
+                .setItems(items, (dialog, which) -> {
+                    if (which == 0) toggleInfo();
+                    else if (which == 1) subtitlePicker.launch(new String[]{"application/x-subrip", "text/vtt", "text/plain", "application/ttml+xml", "*/*"});
+                    else if (which == 2) cycleResizeMode();
+                    else Toast.makeText(this, modeName, Toast.LENGTH_SHORT).show();
+                })
+                .show();
+    }
+
     private void cycleResizeMode() {
         resizeIndex = (resizeIndex + 1) % resizeModes.length;
         playerView.setResizeMode(resizeModes[resizeIndex]);
-        resizeButton.setText(resizeNames[resizeIndex]);
+        resizeButton.setText("▣ " + resizeNames[resizeIndex]);
         showGestureText("Screen: " + resizeNames[resizeIndex]);
     }
 
@@ -359,6 +448,7 @@ public class PlayerActivity extends AppCompatActivity {
 
         StringBuilder s = new StringBuilder();
         s.append("EXTREME DV INFO\n");
+        s.append("Playback mode: ").append(modeName).append('\n');
         if (video != null) {
             s.append("Video: ").append(video.width).append('×').append(video.height);
             if (video.frameRate > 0) s.append(String.format(Locale.US, "  %.2f fps", video.frameRate));
@@ -366,7 +456,8 @@ public class PlayerActivity extends AppCompatActivity {
             s.append("Video codec: ").append(nonNull(video.codecs, video.sampleMimeType)).append('\n');
             s.append("Video bitrate: ").append(formatBitrate(video.averageBitrate, video.peakBitrate)).append('\n');
             s.append("HDR/DV: ").append(describeDolbyVision(video)).append('\n');
-            s.append("DV decoder preference: c2.dolby.decoder.hevc\n");
+            if (!modeName.startsWith("Original stream")) s.append("DV decoder preference: c2.dolby.decoder.hevc\n");
+            else s.append("Decoder selection: Android original/default\n");
         } else {
             s.append("Video: waiting for track info…\n");
         }
@@ -385,9 +476,7 @@ public class PlayerActivity extends AppCompatActivity {
         String codec = f.codecs == null ? "" : f.codecs.toLowerCase(Locale.ROOT);
         if (codec.contains("dvhe.05") || codec.contains("dvh1.05")) return "Dolby Vision Profile 5";
         if (codec.contains("dvhe.07") || codec.contains("dvh1.07")) return "Dolby Vision Profile 7";
-        if (codec.contains("dvhe.08") || codec.contains("dvh1.08")) {
-            return "Dolby Vision Profile 8 (8.x; 8.4 sub-profile requires bitstream metadata check)";
-        }
+        if (codec.contains("dvhe.08") || codec.contains("dvh1.08")) return "Dolby Vision Profile 8 (8.x)";
         if (codec.contains("dvav.09")) return "Dolby Vision Profile 9";
         if (codec.contains("dav1") || codec.contains("dva1")) return "Dolby Vision AV1 / Profile 10 family";
         if (MimeTypes.VIDEO_DOLBY_VISION.equals(f.sampleMimeType)) return "Dolby Vision (profile not declared in codec string)";
